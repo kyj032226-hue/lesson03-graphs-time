@@ -119,9 +119,72 @@ with tab1:
         st.warning("선택한 영화의 데이터가 존재하지 않습니다.")
 
 with tab2:
-    st.subheader("📌 섹션 2: 주요 영화 관객수 비교")
-    st.write("여러 영화의 일별 관객수 추이를 한 그래프에서 비교 분석하는 공간입니다.")
-    st.info("💡 **이 그래프로 알 수 있는 것**: (추후 그래프 추가 시 분석 문구가 들어갈 자리입니다.)")
+    st.subheader("📌 섹션 2: 기간 내 관객수 Top 5 영화의 관객수 추이 비교")
+    st.write("수집된 기간 동안 일관객 합계가 가장 큰 상위 5개 영화의 날짜별 관객수 변화를 한 그래프에서 비교합니다.")
+    
+    # 일관객 합계 기준 Top 5 영화 추출
+    top5_movies = df.groupby('영화명')['일관객'].sum().nlargest(5).index.tolist()
+    
+    # Top 5 영화 데이터 필터링 및 날짜순 정렬
+    top5_df = df[df['영화명'].isin(top5_movies)].sort_values('날짜')
+    
+    if not top5_df.empty:
+        # Top 5 영화 메트릭 요약 표시
+        st.write("🏆 **기간 내 총 관객수 상위 5개 영화**")
+        top5_summary = df[df['영화명'].isin(top5_movies)].groupby('영화명')['일관객'].sum().reindex(top5_movies)
+        
+        cols = st.columns(5)
+        for idx, (movie_name, total_aud) in enumerate(top5_summary.items()):
+            with cols[idx]:
+                st.metric(
+                    label=f"{idx+1}위: {movie_name}",
+                    value=f"{total_aud:,}명"
+                )
+        
+        st.write("")
+        
+        # Plotly 다중 선 그래프 생성
+        fig2 = px.line(
+            top5_df,
+            x='날짜',
+            y='일관객',
+            color='영화명',
+            category_orders={'영화명': top5_movies},
+            title="<b>[Top 5 영화] 날짜별 일관객수 비교</b>",
+            labels={'날짜': '날짜', '일관객': '일별 관객수(명)', '영화명': '영화 제목'},
+            markers=True,
+            template="plotly_white"
+        )
+        
+        # 툴팁 및 스타일 설정
+        fig2.update_traces(
+            hovertemplate="<b>영화명:</b> %{fullData.name}<br><b>날짜:</b> %{x|%Y년 %m월 %d일}<br><b>일관객수:</b> %{y:,}명<extra></extra>",
+            line=dict(width=2)
+        )
+        
+        fig2.update_layout(
+            hovermode="x unified",
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickformat=","),
+            height=500,
+            legend=dict(
+                title="영화 선택 (클릭하여 범례 토글)",
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        # 인사이트 문구 박스
+        top_names_str = ", ".join([f"**{m}**" for m in top5_movies[:3]])
+        st.info(f"💡 **이 그래프로 알 수 있는 것**: 흥행 상위 영화인 {top_names_str} 등이 서로 다른 시기에 흥행 정상에 올랐던 패턴과 각 영화별 최고 관객 수(피크 Point)의 높이를 직접 비교할 수 있습니다. (오른쪽 상단 범례 항목을 클릭하여 특정 영화만 선택/제외 가능합니다.)")
+    else:
+        st.warning("Top 5 영화 데이터를 생성할 수 없습니다.")
 
 with tab3:
     st.subheader("📌 섹션 3: 월별 및 요일별 Box Office 패턴")
