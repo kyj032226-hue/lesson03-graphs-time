@@ -52,8 +52,8 @@ st.sidebar.info("💡 **안내**: 상단 탭을 통해 다양한 관점의 시�
 
 tab1, tab2, tab3 = st.tabs([
     "📈 1. 영화별 일관객 변화", 
-    "📊 2. 주요 영화 관객 비교 (추가 예정)", 
-    "📅 3. 월별/요일별 추이 (추가 예정)"
+    "📊 2. 주요 영화 관객 비교", 
+    "🏔️ 3. 일별 총 관객수 추이 (영역 그래프)"
 ])
 
 with tab1:
@@ -187,9 +187,89 @@ with tab2:
         st.warning("Top 5 영화 데이터를 생성할 수 없습니다.")
 
 with tab3:
-    st.subheader("📌 섹션 3: 월별 및 요일별 Box Office 패턴")
-    st.write("시즌별(월별, 요일별) 전체 박스오피스 관객 동향 및 시계열 패턴을 분석하는 공간입니다.")
-    st.info("💡 **이 그래프로 알 수 있는 것**: (추후 그래프 추가 시 분석 문구가 들어갈 자리입니다.)")
+    st.subheader("📌 섹션 3: 날짜별 10위권 일관객 합계 추이 (영역 그래프)")
+    st.write("매일 박스오피스 상위 10개 영화의 일관객을 모두 합산하여 전체 극장가의 관객 동향과 최고 피크일을 확인합니다.")
+    
+    # 날짜별 일관객 합계 계산
+    daily_total_df = df.groupby('날짜')['일관객'].sum().reset_index().sort_values('날짜')
+    
+    if not daily_total_df.empty:
+        # 상위 3개 관객수 극대화 날짜 추출
+        top3_days = daily_total_df.nlargest(3, '일관객').reset_index(drop=True)
+        
+        # 메트릭 요약
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            avg_daily = int(daily_total_df['일관객'].mean())
+            st.metric("일평균 총 관객수(Top 10)", f"{avg_daily:,}명")
+        with col2:
+            max_day_str = top3_days.iloc[0]['날짜'].strftime('%Y-%m-%d')
+            st.metric("최고 관객 기록일 (1위)", max_day_str)
+        with col3:
+            max_aud_val = top3_days.iloc[0]['일관객']
+            st.metric("1위 날의 총 관객수", f"{max_aud_val:,}명")
+            
+        st.write("")
+        
+        # Plotly 영역 그래프 (Area Chart) 생성
+        fig3 = px.area(
+            daily_total_df,
+            x='날짜',
+            y='일관객',
+            title="<b>[전체 박스오피스] 날짜별 일관객 합계 추이</b>",
+            labels={'날짜': '날짜', '일관객': '일별 총 관객수(명)'},
+            template="plotly_white"
+        )
+        
+        # 그래프 채우기 색상 및 라인 스타일 설정
+        fig3.update_traces(
+            line=dict(color='#E50914', width=2),
+            fillcolor='rgba(229, 9, 20, 0.25)',
+            hovertemplate="<b>날짜:</b> %{x|%Y년 %m월 %d일}<br><b>일관객 합계:</b> %{y:,}명<extra></extra>"
+        )
+        
+        # Top 3 피크 날짜 화살표 및 주석(Annotation) 표시
+        for rank, row in top3_days.iterrows():
+            peak_date = row['날짜']
+            peak_val = row['일관객']
+            date_label = peak_date.strftime('%Y-%m-%d')
+            
+            fig3.add_annotation(
+                x=peak_date,
+                y=peak_val,
+                text=f"<b>🔥 Peak {rank+1}위</b><br>{date_label}<br>({peak_val:,}명)",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor="#E50914",
+                ax=0,
+                ay=-50 - (rank * 10),  # 주석끼리 겹치지 않게 오프셋 부여
+                bgcolor="white",
+                bordercolor="#E50914",
+                borderwidth=1.5,
+                borderpad=5,
+                opacity=0.9
+            )
+        
+        fig3.update_layout(
+            hovermode="x unified",
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickformat=","),
+            height=500,
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        
+        st.plotly_chart(fig3, use_container_width=True)
+        
+        # Top 3 날짜 문구 조합
+        top1_str = f"{top3_days.iloc[0]['날짜'].strftime('%Y년 %m월 %d일')}({top3_days.iloc[0]['일관객']:,}명)"
+        top2_str = f"{top3_days.iloc[1]['날짜'].strftime('%Y년 %m월 %d일')}({top3_days.iloc[1]['일관객']:,}명)"
+        top3_str = f"{top3_days.iloc[2]['날짜'].strftime('%Y년 %m월 %d일')}({top3_days.iloc[2]['일관객']:,}명)"
+        
+        st.info(f"💡 **이 그래프로 알 수 있는 것**: 1년 중 전체 극장가(Top 10 기준) 관객 동원이 가장 극대화되었던 Peak Top 3 날짜는 **1위 {top1_str}**, **2위 {top2_str}**, **3위 {top3_str}** 입니다. 연휴 및 명절, 대작 개봉일 등 특정 시기 영화 시장 전체의 파이(Market Volume)가 크게 확장되는 지점을 직관적으로 볼 수 있습니다.")
+    else:
+        st.warning("데이터를 불러올 수 없습니다.")
 
 st.markdown("---")
 st.caption("데이터 출처: 영화진흥위원회(KOBIS) 일별 박스오피스 데이터 | 영화 데이터 그래프 도감 프로젝트")
