@@ -50,11 +50,12 @@ st.sidebar.metric(label="수집된 영화 수", value=f"{total_movies:,}개")
 st.sidebar.markdown("---")
 st.sidebar.info("💡 **안내**: 상단 탭을 통해 다양한 관점의 시간 분석 그래프를 확인하실 수 있습니다.")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📈 1. 영화별 일관객 변화", 
     "📊 2. 주요 영화 관객 비교", 
     "🏔️ 3. 일별 총 관객수 추이 (영역 그래프)",
-    "🏆 4. 기간 내 TOP 10 영화 (가로 막대그래프)"
+    "🏆 4. 기간 내 TOP 10 영화 (가로 막대그래프)",
+    "🔥 5. 월×요일별 관객 분포 (히트맵)"
 ])
 
 with tab1:
@@ -337,6 +338,78 @@ with tab4:
         
         # 인사이트 문구 박스
         st.info(f"💡 **이 그래프로 알 수 있는 것**: 해당 기간 최다 관객을 동원한 영화 1위는 **{top1_movie}**({top1_aud:,}명, TOP 10 진입 {top1_days}일)입니다. 막대에 마우스를 올리면 각 영화가 TOP 10 박스오피스 순위권에 며칠 동안 머물렀는지 누적 진입 일수를 한눈에 비교할 수 있습니다.")
+    else:
+        st.warning("데이터를 불러올 수 없습니다.")
+
+with tab5:
+    st.subheader("📌 섹션 5: 월×요일별 관객수 분포 (히트맵)")
+    st.write("월과 요일에 따른 관객수 합계를 히트맵으로 시각화하여, 극장 관객이 어느 달과 요일에 가장 많이 집중되는지 파악합니다.")
+    
+    # 데이터 복사 및 월, 요일 추출
+    heatmap_df = df.copy()
+    heatmap_df['월_num'] = heatmap_df['날짜'].dt.month
+    heatmap_df['월'] = heatmap_df['월_num'].astype(str) + "월"
+    
+    # 요일 이름 매핑 (월요일 ~ 일요일)
+    day_map = {0: '월요일', 1: '화요일', 2: '수요일', 3: '목요일', 4: '금요일', 5: '토요일', 6: '일요일'}
+    heatmap_df['요일'] = heatmap_df['날짜'].dt.weekday.map(day_map)
+    
+    # 정렬 순서 정의
+    days_order = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
+    months_order = [f"{m}월" for m in sorted(heatmap_df['월_num'].unique())]
+    
+    # 피벗 테이블 생성 (행: 월, 열: 요일, 값: 일관객 합계)
+    pivot_df = heatmap_df.pivot_table(
+        index='월', 
+        columns='요일', 
+        values='일관객', 
+        aggfunc='sum'
+    ).reindex(index=months_order, columns=days_order).fillna(0)
+    
+    if not pivot_df.empty:
+        # 최다 관객 지점(월, 요일) 산출
+        max_val = pivot_df.max().max()
+        max_month, max_day = pivot_df.stack().idxmax()
+        
+        # 상단 메트릭
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("최대 관객 집중 월", max_month)
+        with col2:
+            st.metric("최대 관객 집중 요일", max_day)
+        with col3:
+            st.metric("해당 월×요일 총 관객수", f"{int(max_val):,}명")
+            
+        st.write("")
+        
+        # Plotly Heatmap 생성
+        fig5 = px.imshow(
+            pivot_df,
+            labels=dict(x="요일", y="월", color="총 관객수(명)"),
+            x=days_order,
+            y=months_order,
+            color_continuous_scale="Reds",
+            aspect="auto",
+            title="<b>[월×요일] 관객수 합계 히트맵</b>",
+            text_auto=",.0f"
+        )
+        
+        # 툴팁 및 레이아웃 설정
+        fig5.update_traces(
+            hovertemplate="<b>%{y} %{x}</b><br>총 관객수: %{z:,}명<extra></extra>"
+        )
+        
+        fig5.update_layout(
+            xaxis=dict(tickangle=0),
+            yaxis=dict(autorange="reversed"),  # 1월이 상단에 오도록 설정
+            height=520,
+            margin=dict(l=20, r=20, t=50, b=20)
+        )
+        
+        st.plotly_chart(fig5, use_container_width=True)
+        
+        # 인사이트 문구 박스
+        st.info(f"💡 **이 그래프로 알 수 있는 것**: 분석 대상 기간 중 **{max_month} {max_day}**에 총 **{int(max_val):,}명**으로 관객 집중도가 가장 높았습니다. 색상의 짙은 정도를 통해 주말(토·일요일) 및 특정 흥행 계절(명절, 여름/겨울 성수기 등)의 극장가 관객 몰림 현상을 한눈에 비교할 수 있습니다.")
     else:
         st.warning("데이터를 불러올 수 없습니다.")
 
